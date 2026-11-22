@@ -8,11 +8,13 @@ This document describes the intended architecture for Oh Machi (町): a decentra
 - **Agent-built personalization.** Each player’s local AI agent produces pixel-art content under strict tooling constraints (grid, palette, lot boundaries). Humans approve or edit before publish.
 - **Offline-friendly lots.** Neighbors cache and re-seed signed asset bundles so lots remain visitable when owners are offline.
 - **Cryptographic identity, not accounts.** An Ed25519 keypair is the player, the publisher, and the signature on assets.
-- **Linux-desktop-first, not Linux-only.** Native performance and systemd-friendly daemons matter for Omarchy/Hyprland users; other platforms should remain possible.
+- **Linux-desktop-first, not Linux-only.** A small peer **daemon** (systemd user service) plus browser UI keeps Omarchy/Hyprland workflows simple; other platforms can run the same daemon and open the local URL.
+- **Minimal dependencies.** Prefer small, inspectable libraries (Hyperswarm/HyperDHT, Yjs, Ed25519 signing). Avoid game engines and heavy UI frameworks.
 
 ## Non-goals (for early milestones)
 
 - Massive concurrent worlds (MMO scale) or authoritative anti-cheat servers.
+- **Game engines** (Godot, Unity, etc.) or Electron/Tauri as required parts of the stack — optional thin wrappers only.
 - Mobile-first clients or app-store packaging (may come later).
 - On-chain assets, NFTs, or cryptocurrency economies (in-world barter may exist; design TBD).
 - Fully automated moderation without human or community input.
@@ -24,8 +26,8 @@ This document describes the intended architecture for Oh Machi (町): a decentra
 
 Oh Machi splits into four cooperating layers:
 
-1. **Town daemon** — P2P networking, discovery, asset replication, CRDT sync, optional mDNS on LAN.
-2. **Game client** — Renders the neighborhood, input, audio; talks to the daemon over a local IPC API.
+1. **Town daemon** — P2P networking, discovery, asset replication, CRDT sync, optional mDNS on LAN; **serves the UI** as static assets and a small local HTTP/WebSocket API (`http://127.0.0.1:…`).
+2. **Browser UI** — Plain HTML/JS: neighborhood view, chat, publish flows. Opened in the user’s browser or an optional webview shell (Tauri/Electron/wv). No P2P in the browser tab — only talks to the daemon.
 3. **Builder agent** — Local LLM + tools: constrained pixel editor, image-generation backends, sprite-stacking pipeline.
 4. **Shared specifications** — Signed asset bundles, neighborhood manifest, CRDT document schemas.
 
@@ -33,13 +35,14 @@ Oh Machi splits into four cooperating layers:
 flowchart TB
   subgraph local["Player machine"]
     Agent["Builder agent\n(LLM + tools)"]
-    Client["Game client\n(rendering + input)"]
-    Daemon["Town daemon\n(P2P + CRDT + cache)"]
+    Browser["Browser UI\n(canvas + DOM)"]
+    Daemon["Town daemon\n(P2P + HTTP + cache)"]
     Store[("Local store\n(lots, bundles, keys)")]
     Agent -->|"build & sign bundles"| Store
-    Client <-->|"IPC"| Daemon
+    Browser <-->|"HTTP / WS\nlocalhost"| Daemon
     Daemon <-->|"read/write"| Store
     Gen["Image gen\n(ComfyUI, etc.)"] -.->|"optional"| Agent
+    Wrap["Optional webview\nwrapper"] -.->|"opens URL"| Browser
   end
 
   subgraph p2p["Neighborhood (topic key)"]
@@ -102,16 +105,33 @@ The tables below summarize realistic choices verified against public docs and re
 
 **Recommendation:** Treat **content-addressed signed bundles** as the source of truth. Peers fetch by manifest hash over Hyperswarm (`hypercore` replication or simple hash-announce + request/response). Neighbors **pin** bundles they care about (adjacent lots, friends) and advertise availability in a CRDT map: `lot_id → { manifest_hash, publisher_pubkey }`.
 
-### Game client technology
+### Client shell (browser-first)
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **Tauri 2 + WebGL/Canvas or wgpu** | Small Linux binary; reuse HTML sprite-stacking viewer ideas; IPC to Node/Rust daemon | Game loop and ECS patterns are DIY; P2P in WebView is limited — daemon required anyway |
-| **Electron** | Same web stack, familiar | Heavier RAM/CPU on older laptops |
-| **Godot 4** | Built-in 2D/3D, export to Linux | Agent/sprite-stacking pipeline is Python/PNG-centric; duplicate tooling; P2P via GDExtension effort |
-| **Web-only** | Easy share | No raw TCP/UDP; depends entirely on WebRTC and signaling unless paired with daemon |
+| Approach | Role | Notes |
+|----------|------|--------|
+| **Any browser → local URL** | Default UX | User runs daemon; opens `http://127.0.0.1:<port>/`. Works on Omarchy and elsewhere with zero extra packages. |
+| **Optional webview wrapper** | Convenience | Minimal Tauri/Electron/embedded webview that only loads the local URL (no second app logic). Not a project requirement. |
+| **Godot / Unity / etc.** | — | **Out of scope.** Would fork the PNG/sprite-stacking pipeline and inflate dependencies. |
 
-**Recommendation:** **Tauri 2** desktop client + **Node or Bun town daemon** for Milestone 1 (fast iteration, Hyperswarm is JS-native). Long-term, hot paths (rendering, pathfinding) can move to Rust inside Tauri. **Godot** remains a contingency if we hire dedicated game-engine work and abandon browser-tech rendering.
+**Recommendation:** Ship **daemon + static `ui/`** as the product surface. Document a desktop file or shell alias (`ohmachi open`) that starts the daemon if needed and opens the default browser. Add a wrapper package only if users ask for one window chrome.
+
+**Daemon runtime:** **Node or Bun** for Milestone 1 (Hyperswarm and Yjs are JS-native). Keep the dependency tree small; avoid bundling a browser inside the default install.
+
+### Rendering: Canvas 2D vs three.js
+
+Oh Machi’s fake-3D look matches **sprite stacking**: horizontal slice strips, pitch/squash, Y-ordered draws, optional normal/emissive strips and simple ground shadows — the same model as [sprite-stacking](https://github.com/danielwh2/sprite-stacking)’s reference viewer (software rasterizer, typed arrays, scene Y-sort).
+
+| Criterion | Custom **Canvas 2D** | **three.js** (WebGL) |
+|-----------|----------------------|----------------------|
+| **Sprite-stacked slices** | Natural fit: `drawImage` per slice, nearest-neighbor scaling, direct port of stacking math | Renders as textures on planes; must fight `LINEAR` filtering for crisp pixels; scene graph heavier than needed |
+| **Y-sorting / draw order** | Sort instances by foot Y (and tie-break); one pass | `sortObjects` or manual render order; works but adds WebGL layer |
+| **Lighting / time-of-day** | Per-slice or per-pixel tint from sun vector; emissive from companion strip (reference viewer pattern) | Real lights + shadow maps; powerful but easy to look “wrong” for pixel art; more shaders to maintain |
+| **Ground shadows** | 2D projected footprint (reference uses flat squash projection) | Shadow maps — overhead for mostly-orthogonal pixel props |
+| **Tile layers** | Straightforward grid blit | Possible with orthographic camera; still more setup |
+| **Bundle size / deps** | **0** extra render libraries | Non-trivial npm payload + WebGL context lifetime |
+| **When three.js wins** | — | Many moving stacked props + post-processing + true camera tilt **if** canvas profiling fails targets |
+
+**Recommendation:** **Custom Canvas 2D renderer** for M1–M4, reusing the sprite-stacking approach (slice strip → stacked frames, unified Y-sort, optional normals/emissive). Treat **three.js as opt-in only** after a measured prototype: adopt it only if canvas cannot sustain the M4 target (~30 FPS with modest stacked prop counts on a laptop CPU) without unmaintainable code. Default dependency list should **not** include three.js.
 
 ### Image generation
 
@@ -133,7 +153,7 @@ The agent never writes raw PNGs straight to the P2P layer without passing throug
 2. **Constrain** — Snap to neighborhood palette (`--colours N` in `views_to_slices.py`; default 24).
 3. **Carve** — Run `views_to_slices.py` → `slices.png`, optional `--normals`, `--emissive`, `--preview`.
 4. **Bundle** — Store strips in [asset bundle](ASSET_FORMAT.md) as `type: "sprite_stack"` with metadata: `slice_count`, `slice_width`, `slice_height`, `squash`, `spacing`.
-5. **Runtime** — Client reuses stacking math from the reference viewer (or pre-bakes 16-direction sheets via export tooling for performance).
+5. **Runtime** — Browser canvas reuses stacking math from the reference viewer (or pre-bakes 16-direction sheets via export tooling for performance).
 
 **Flat tiles** (ground, fences, floor patterns) stay **2D tile layers** on a fixed lot grid; only props and avatars use sprite stacks.
 
@@ -154,7 +174,7 @@ No username registry, email, or OAuth.
 
 ## Discovery (detail)
 
-1. Client/daemon joins neighborhood `topic_key`.
+1. Daemon joins neighborhood `topic_key`; browser UI connects to daemon API only.
 2. **WAN:** HyperDHT bootstrap list (configurable; ship defaults, allow user override). Topic advertised as `discoveryKey = hash(topic_key)`.
 3. **LAN:** mDNS service `_ohmachi._udp` with instance name = neighborhood id fingerprint (not full secret for private hoods).
 4. Peers exchange: pubkey, supported protocol versions, manifest heads, Yjs state vector.
@@ -250,9 +270,10 @@ Tools return previews (base64 PNG) for human approval in the client UI.
 
 ## Packaging (later)
 
-- Arch **PKGBUILD** splitting `ohmachi` (client), `ohmachi-daemon`, `ohmachi-agent`.
-- **systemd user unit** for daemon at login.
+- Arch **PKGBUILD** splitting **`ohmachi-daemon`** (includes `ui/` static files), **`ohmachi-agent`**, optional **`ohmachi-desktop`** (browser launcher only).
+- **systemd user unit** for daemon at login; docs explain opening `http://127.0.0.1:…` or `ohmachi open`.
 - Optional **Quickshell** widget for status (neighbors online, unread chat).
+- **No** default dependency on Tauri, Electron, or Godot.
 
 ---
 
@@ -262,10 +283,11 @@ Tools return previews (base64 PNG) for human approval in the client UI.
 2. **Economy** — Barter only, neighborhood scrip, or no currency in v1?
 3. **Lot allocation** — First-claim in CRDT vs signed genesis map from neighborhood creator?
 4. **Hypercore per lot vs static bundles** — Append-only updates for building renovations vs immutable versioned manifests.
-5. **Cross-platform daemon** — Stay Node/Bun or migrate core to Rust for one binary?
-6. **Legal / copyright** — Agent-generated art resembling existing IP; user education and per-hood rules.
-7. **Bootstrap sustainability** — Who operates DHT bootstrap nodes long term?
-8. **Private neighborhood leakage** — mDNS and DHT metadata that might fingerprint invite-only towns.
+5. **Cross-platform daemon** — Stay Node/Bun or migrate core to Rust for one binary (without pulling in a game engine)?
+6. **Canvas performance ceiling** — At what prop count does canvas force a three.js spike or baked sprite sheets?
+7. **Legal / copyright** — Agent-generated art resembling existing IP; user education and per-hood rules.
+8. **Bootstrap sustainability** — Who operates DHT bootstrap nodes long term?
+9. **Private neighborhood leakage** — mDNS and DHT metadata that might fingerprint invite-only towns.
 
 ---
 

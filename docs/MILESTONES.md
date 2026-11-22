@@ -29,7 +29,7 @@ Phased plan from first P2P demo to a shippable Linux experience. Dates are inten
 | World sync | Yjs (or equivalent) sync: player position, facing, lot manifest pointers |
 | Assets | Sign and publish v0.1 bundle per [ASSET_FORMAT.md](ASSET_FORMAT.md); fetch peer bundle by hash; cache on disk |
 | Agent (manual OK) | Produce at least one house using constrained pixel tool **or** checked-in fixture bundle built by agent offline |
-| Client | Top-down or fake-3D lot view; render own + peer lot; local avatar movement; remote avatars interpolated |
+| Browser UI | Static page from daemon (`localhost`); Canvas 2D top-down or fake-3D lot view; own + peer lots; local movement; remote avatars interpolated |
 | Chat | Neighborhood text chat in CRDT or side channel; messages appear < 2s apart under normal LAN/WAN |
 
 ### Acceptance criteria
@@ -59,7 +59,7 @@ Phased plan from first P2P demo to a shippable Linux experience. Dates are inten
 
 1. Agent can complete: concept → 4-view sheet → `views_to_slices.py` → bundle with `sprite_stack` asset type.
 2. Neighborhood shared palette enforced; out-of-palette colors rejected at sign time.
-3. Peer client renders sprite-stacked prop with rotation or pre-baked 8/16 facing directions.
+3. Browser canvas renderer draws sprite-stacked props (rotation or pre-baked 8/16 facing); no three.js unless a prior perf spike doc says otherwise.
 4. Human preview step required before `lot.publish` (no silent auto-publish).
 5. Pluggable image backend: at least one of (local ComfyUI, stub fixture, agent-only Pillow) documented in config.
 
@@ -89,21 +89,22 @@ Phased plan from first P2P demo to a shippable Linux experience. Dates are inten
 2. At least three placeable prop types per lot (signed, bounded foot-print).
 3. Avatar swaps outfit from signed `character` bundle.
 4. Emote triggers broadcast to peers; visible animation or icon.
-5. Performance: 8 concurrent peers on modest laptop (CPU from DESIGN assumptions) holds ≥ 30 FPS client render.
+5. Performance: 8 concurrent peers on modest laptop (CPU from DESIGN assumptions) holds ≥ 30 FPS **canvas** render (profile before considering three.js).
 
 ---
 
 ## Milestone 5 — Linux packaging (Omarchy-friendly)
 
-**Scope:** Arch PKGBUILD, systemd user service for daemon, CLI (`ohmachi join`, `ohmachi status`), optional Quickshell widget sketch.
+**Scope:** Arch PKGBUILD for **daemon + bundled `ui/`**, systemd user service, CLI (`ohmachi join`, `ohmachi status`, `ohmachi open` → browser), optional Quickshell widget sketch. No packaged game engine or Electron/Tauri **requirement**.
 
 ### Acceptance criteria
 
-1. `pacman -U` or AUR install path documented; installs client + daemon + default config.
+1. `pacman -U` or AUR install path documented; installs **daemon (with static UI)** + default config.
 2. `systemctl --user enable --now ohmachi-daemon` joins last neighborhood or idle-waits.
-3. CLI prints peer count, topic, sync status without launching GUI.
-4. Quickshell widget or documented stub showing online neighbors (optional if Quickshell unavailable in CI).
-5. Works on Hyprland session (Wayland); X11 optional.
+3. CLI prints peer count, topic, sync status and local UI URL without opening a browser (unless `ohmachi open`).
+4. `ohmachi open` (or documented equivalent) launches the user’s default browser to the daemon URL on Hyprland/Wayland and X11.
+5. Quickshell widget or documented stub showing online neighbors (optional if Quickshell unavailable in CI).
+6. Optional wrapper package documented separately if provided; must not duplicate P2P or render logic.
 
 ---
 
