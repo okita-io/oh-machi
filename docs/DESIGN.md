@@ -124,7 +124,7 @@ Oh Machi’s fake-3D look matches **sprite stacking**: horizontal slice strips, 
 | Criterion | Custom **Canvas 2D** | **three.js** (WebGL) |
 |-----------|----------------------|----------------------|
 | **Sprite-stacked slices** | Natural fit: `drawImage` per slice, nearest-neighbor scaling, direct port of stacking math | Renders as textures on planes; must fight `LINEAR` filtering for crisp pixels; scene graph heavier than needed |
-| **Y-sorting / draw order** | Sort instances by foot Y (and tie-break); one pass | `sortObjects` or manual render order; works but adds WebGL layer |
+| **Y-sorting / draw order** | Sort by `foot_y` then tie-break (see [Coordinate system](#coordinate-system)); one pass | `sortObjects` or manual render order; works but adds WebGL layer |
 | **Lighting / time-of-day** | Per-slice or per-pixel tint from sun vector; emissive from companion strip (reference viewer pattern) | Real lights + shadow maps; powerful but easy to look “wrong” for pixel art; more shaders to maintain |
 | **Ground shadows** | 2D projected footprint (reference uses flat squash projection) | Shadow maps — overhead for mostly-orthogonal pixel props |
 | **Tile layers** | Straightforward grid blit | Possible with orthographic camera; still more setup |
@@ -152,7 +152,7 @@ The agent never writes raw PNGs straight to the P2P layer without passing throug
 1. **Concept** — Image model or agent draws a 4-view sheet (1×4 row or 2×2 grid); optional palette reduction.
 2. **Constrain** — Snap to neighborhood palette (`--colours N` in `views_to_slices.py`; default 24).
 3. **Carve** — Run `views_to_slices.py` → `slices.png`, optional `--normals`, `--emissive`, `--preview`.
-4. **Bundle** — Store strips in [asset bundle](ASSET_FORMAT.md) as `type: "sprite_stack"` with metadata: `slice_count`, `slice_width`, `slice_height`, `squash`, `spacing`.
+4. **Bundle** — Store strips in [asset bundle](ASSET_FORMAT.md) as `type: "sprite_stack"` with metadata: `slice_count`, `slice_width`, `slice_height`, `squash`, `layer_spacing`.
 5. **Runtime** — Browser canvas reuses stacking math from the reference viewer (or pre-bakes 16-direction sheets via export tooling for performance).
 
 **Flat tiles** (ground, fences, floor patterns) stay **2D tile layers** on a fixed lot grid; only props and avatars use sprite stacks.
@@ -199,6 +199,93 @@ Invite flow for private neighborhoods: export `ohmachi://join?k=<base64url secre
 
 ---
 
+## Coordinate system
+
+Oh Machi uses a **right-handed** world frame with **+Z up**. All neighborhood simulation, manifests, and CRDT player state share these axes. Field names in [ASSET_FORMAT.md](ASSET_FORMAT.md) match this section.
+
+### Axes (world space)
+
+| Axis | Direction | Screen mapping |
+|------|-----------|----------------|
+| **+X** | East | Increasing **to the right** on screen |
+| **+Y** | South | Increasing **down** the screen (ground depth toward the camera) |
+| **+Z** | Up | Height above the ground plane |
+
+The **ground plane** is the XY plane at a reference elevation (per-lot `origin` Z, usually `0`). Walking and tile grids live on XY; jump, stacked slices, and rooftops add Z.
+
+```mermaid
+flowchart LR
+  subgraph ground["Ground plane (XY)"]
+    direction TB
+    NW["← −X west · north −Y ↑"]
+    E["+X east →"]
+    S["+Y south ↓"]
+  end
+  Z["+Z up (out of page)"]
+  ground --- Z
+```
+
+*(Diagram is schematic: north is **−Y**, south is **+Y**.)*
+
+### Tiles and world units
+
+- **Lot and tile indices** are integers `(tile_x, tile_y)` on the ground plane, **east and south** positive.
+- **1 tile = 1 world unit** along X and Y unless a neighborhood doc says otherwise.
+- **Pixel size** for art comes from `tile_size_px` (16 or 32) in bundles: one tile edge is drawn `tile_size_px` screen pixels at 1:1 zoom, before camera scale.
+- A world position in continuous space uses tile coordinates plus fractions, e.g. center of tile `(4, 6)` → `(4.5, 6.5, foot_z)`.
+
+### Height and sprite stacks
+
+For a `sprite_stack` instance anchored at world `(x, y, z₀)` with manifest fields `layer_spacing` and `squash` (see [ASSET_FORMAT.md](ASSET_FORMAT.md)):
+
+- Slice index `i` (0 = ground slice, **leftmost** in the horizontal PNG strip) sits at world height **`z = z₀ + i * layer_spacing`**.
+- Stacking along **+Z** is the **default** (`stack_axis: "z"`).
+
+**Optional render trick:** a client may treat `stack_axis: "y"` as extruding the same sprite along **+Y** (south), with a darkening tint per step, to fake thickness or a drop shadow on the ground. This does not change the baked strip; it is a **local drawing mode** only.
+
+### Screen projection (canvas renderer)
+
+Camera pitch is encoded by **`squash`** (0–1, same semantics as [sprite-stacking](https://github.com/danielwh2/sprite-stacking): lower = stronger “into the screen” tilt). Let `(x, y, z)` be a point in **world tiles**, and `s` = `squash`, `k` = `px_per_tile` (from zoom × `tile_size_px`).
+
+**Projection** (before pan/center):
+
+```
+screen_x_px = k * x
+screen_y_px = k * s * (y - z)
+```
+
+World **+X** moves right; larger **+Y** and larger **+Z** both move the draw position **up** on screen (north and up are toward smaller screen Y). Implementations add a constant `screen_base_y` per frame for centering the neighborhood view.
+
+Stack drawing lifts each slice by `layer_spacing` in Z before projecting, then composites slices bottom-to-top (increasing `i`).
+
+### Draw order (Y-sort)
+
+Painters’ order uses the **foot** of each drawable (ground contact), not the top of the stack:
+
+1. Primary key: **`foot_y`** (world tiles, south increases depth).
+2. Tie-break (same `foot_y`): lower **`foot_x`** (west) first, then lower **`foot_z`**, then stable **`instance_id`**.
+
+Draw **later** (more south / higher keys) **on top**. Avatar and prop hitboxes use the same foot point for sorting and overlap.
+
+### Facing and rotation
+
+- **`facing_deg`** is yaw in the ground plane, **counterclockwise** when viewed from **above** (+Z looking down).
+- **`facing_deg = 0`** means the prop or avatar faces **+X (east)**.
+- **`facing_deg = 90`** faces **+Y (south)**; **180** faces west; **270** faces north.
+
+**16-direction sprite sheets** (`sprite_sheet` assets): frame `d` covers yaw `d * 22.5°` for `d ∈ {0,…,15}`, with `d = 0` = east. Optional manifest field **`facing_offset_deg`** rotates which baked frame counts as east (default `0`).
+
+Runtime stacking may rotate slice strips continuously; pre-baked sheets snap to the nearest direction index.
+
+### CRDT and manifests
+
+- **`players.position`**: `{ x, y, z }` in world tiles (continuous floats allowed); `z` is feet height on the ground plane stack.
+- **`players.facing`**: `facing_deg` as above.
+- **`lot_placement.stack_instances[].foot_tile`**: integer tile `(x, y)` for the prop foot on the ground plane; **`foot_z`** for base elevation (default `0`).
+- Neighborhood **`grid_cell_px`**: default pixels per tile for the hood; should match bundle `tile_size_px` unless scaling is explicit.
+
+---
+
 ## World state
 
 Logical state lives in a per-neighborhood **Y.Doc** (recommended):
@@ -206,7 +293,7 @@ Logical state lives in a per-neighborhood **Y.Doc** (recommended):
 | Shared type | Contents |
 |-------------|----------|
 | `lots` | Map: `lot_id → { owner_pubkey, manifest_hash, bounds, version }` |
-| `players` | Map: `pubkey → { position, facing, animation, last_seen }` |
+| `players` | Map: `pubkey → { position: {x,y,z}, facing_deg, animation, last_seen }` |
 | `chat` | Array of `{ id, author, text, ts }` (capped length; archive in local logs) |
 | `hood_meta` | Name, palette id, grid size, semver rules |
 | `blocks` | Map of blocked pubkeys (local preference replicated cautiously — see moderation) |

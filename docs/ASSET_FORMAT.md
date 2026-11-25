@@ -4,6 +4,8 @@ This spec defines a **signed, content-addressed** bundle for lots, props, charac
 
 **Status:** Draft for Milestone 1. Fields may change with a bumped `format_version`.
 
+World positions, facing, draw order, and projection use the **coordinate system** in [DESIGN.md — Coordinate system](DESIGN.md#coordinate-system) (+X east, +Y south, +Z up; tile units on the ground plane).
+
 ---
 
 ## Design principles
@@ -68,6 +70,7 @@ with lengths declared only in `manifest.json` (no zip slip; relative paths forbi
         "slice_height": 18,
         "squash": 0.75,
         "layer_spacing": 1.0,
+        "stack_axis": "z",
         "companion": {
           "normals": { "path": "assets/house_main.normals.png", "content_hash": "...", "byte_length": 0 },
           "emissive": { "path": "assets/house_main.emissive.png", "content_hash": "...", "byte_length": 0 }
@@ -94,7 +97,8 @@ with lengths declared only in `manifest.json` (no zip slip; relative paths forbi
     "stack_instances": [
       {
         "asset_id": "house_main",
-        "tile_pos": { "x": 4, "y": 6 },
+        "foot_tile": { "x": 4, "y": 6 },
+        "foot_z": 0,
         "facing_deg": 0
       }
     ]
@@ -120,9 +124,9 @@ with lengths declared only in `manifest.json` (no zip slip; relative paths forbi
 
 | Type | Description |
 |------|-------------|
-| `sprite_stack` | Horizontal strip PNG from sprite-stacking (`slice_count` × `slice_width` × `slice_height` pixels) |
-| `tile_layer` | Regular grid of tiles on lot coordinates |
-| `sprite_sheet` | Pre-baked rotations (e.g. 16 directions); optional `frame_w`, `frame_h`, `frame_count` in type-specific block |
+| `sprite_stack` | Horizontal strip PNG from sprite-stacking (`slice_count` × `slice_width` × `slice_height` pixels); see [Sprite stack strips](#sprite-stack-strips) |
+| `tile_layer` | Regular grid of tiles on integer lot coordinates; see [Tile layers](#tile-layers) |
+| `sprite_sheet` | Pre-baked 16 yaw frames; `facing_offset_deg` (default `0`) = which frame is east (+X); see [Coordinate system](DESIGN.md#facing-and-rotation) |
 | `raw_views` | Four-view sheet before stacking (debug / reprocess only; clients may ignore at runtime) |
 
 ---
@@ -175,7 +179,9 @@ Publishers rotate keys only by claiming a new lot slot or explicit neighborhood 
 ### Tile layers
 
 - PNG stores a **regular grid** of `tile_size_px` (16 or 32) aligned pixels.
-- `grid_w` × `grid_h` is logical lot size, not necessarily full PNG dimensions (PNG may include padding).
+- `grid_w` × `grid_h` is the logical lot size in **tiles** on the ground plane (+X east, +Y south per [DESIGN.md](DESIGN.md#coordinate-system)); not necessarily the full PNG dimensions (PNG may include padding).
+- Tile index `(0, 0)` is the **north-west** corner of the layer: minimum X and minimum Y within the layer’s local grid.
+- `neighborhood.grid_cell_px` and `tile_layer.tile_size_px` should match unless the client applies explicit scaling.
 - Collision and walkability maps may be added in v0.2 as `type: "nav_mask"`.
 
 ### Sprite stack strips
@@ -187,7 +193,26 @@ Per [danielwh2/sprite-stacking](https://github.com/danielwh2/sprite-stacking):
 - Optional **normals** strip: same layout; RGB encodes unit normals (see slicer `compute_normals`).
 - Optional **emissive** strip: same layout; RGBA emissive mask.
 
-Pre-baked `sprite_sheet` (16 directions) may replace runtime stacking for performance; manifest notes `frame_count` and `facing_offset_deg`.
+**World placement** (with anchor at `foot_tile` / `foot_z` from `lot_placement.stack_instances`):
+
+| Field | Meaning |
+|-------|---------|
+| `layer_spacing` | World-tile distance between slice `i` and `i+1` along **+Z** (default axis). |
+| `squash` | Camera pitch factor for projection `screen_y ∝ squash * (y - z)` (see DESIGN). |
+| `stack_axis` | `"z"` (default): stack slices vertically. `"y"`: optional client-only extrusion along +Y with darkening (shadow/thickness trick; strip unchanged). |
+
+Slice `i` world height: `z = foot_z + i * layer_spacing` when `stack_axis` is `"z"`.
+
+**`lot_placement.stack_instances`** fields:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `asset_id` | string | Reference into `assets[]`. |
+| `foot_tile` | `{ x, y }` int | Ground footprint anchor on the lot grid (east/south positive). |
+| `foot_z` | number | Base elevation in world tiles (default `0`). |
+| `facing_deg` | number | Yaw CCW from above; `0` = facing +X (east); matches 16-dir sheets. |
+
+Pre-baked `sprite_sheet` may replace runtime stacking; set `facing_offset_deg` so frame `0` is east when `facing_deg = 0`.
 
 ---
 
