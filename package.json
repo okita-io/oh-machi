@@ -1,0 +1,28 @@
+{
+  "name": "oh-machi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Oh Machi — peer-to-peer pixel town (daemon + browser UI)",
+  "bin": {
+    "ohmachi-daemon": "./bin/ohmachi-daemon.js"
+  },
+  "scripts": {
+    "daemon": "node bin/ohmachi-daemon.js",
+    "test": "node --test --test-force-exit test/integration.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.1.0",
+    "@noble/hashes": "^1.8.0",
+    "bonjour-service": "^1.3.0",
+    "hyperdht": "^6.36.0",
+    "hyperswarm": "^4.17.2",
+    "lib0": "^0.2.99",
+    "ws": "^8.18.0",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.20"
+  }
+}

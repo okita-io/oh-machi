@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oh Machi — town view</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #1a2332; color: #e8f0ff; display: grid; grid-template-columns: 1fr 280px; height: 100vh; }
+    #grid-wrap { padding: 12px; display: flex; flex-direction: column; min-height: 0; }
+    canvas { image-rendering: pixelated; background: #2d4a3e; border: 2px solid #4a6b5a; flex: 1; width: 100%; max-height: calc(100vh - 80px); }
+    aside { border-left: 1px solid #3d4f66; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+    #status { font-size: 12px; color: #9ab; }
+  </style>
+</head>
+<body>
+  <div id="grid-wrap">
+    <h1 style="margin:0 0 8px;font-size:18px">Oh Machi <span id="town" style="color:#8cf"></span></h1>
+    <canvas id="view" width="640" height="480" tabindex="0"></canvas>
+    <p style="margin:8px 0 0;font-size:12px;color:#9ab">WASD move · ↑↓←→ turn · focus canvas first</p>
+  </div>
+  <aside>
+    <div id="status">connecting…</div>
+    <div><strong>Peers</strong><ul id="peers"></ul></div>
+    <div><strong>Chat</strong><div id="chat" style="flex:1;overflow:auto;max-height:40vh;font-size:12px"></div></div>
+    <form id="chat-form" style="display:flex;gap:6px">
+      <input id="chat-input" style="flex:1" placeholder="say hi" autocomplete="off">
+      <button type="submit">send</button>
+    </form>
+  </aside>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
