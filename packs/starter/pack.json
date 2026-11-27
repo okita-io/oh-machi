@@ -1,0 +1,144 @@
+{
+  "id": "starter",
+  "name": "Starter",
+  "version": "1.0.0",
+  "tileSize": 16,
+  "assets": {
+    "grass": {
+      "file": "grass.png",
+      "layer": "ground",
+      "solid": false,
+      "cameras": ["yard"],
+      "w": 1,
+      "h": 1
+    },
+    "path": {
+      "file": "path.png",
+      "layer": "ground",
+      "solid": false,
+      "cameras": ["yard"],
+      "w": 1,
+      "h": 1
+    },
+    "floor": {
+      "file": "floor.png",
+      "layer": "ground",
+      "solid": false,
+      "cameras": ["inside"],
+      "w": 1,
+      "h": 1
+    },
+    "wall": {
+      "file": "wall.png",
+      "layer": "ground",
+      "solid": true,
+      "cameras": ["inside"],
+      "w": 1,
+      "h": 1
+    },
+    "rug": {
+      "file": "rug.png",
+      "layer": "ground",
+      "solid": false,
+      "cameras": ["inside"],
+      "w": 1,
+      "h": 1
+    },
+    "tree": {
+      "file": "tree.png",
+      "layer": "props",
+      "solid": true,
+      "cameras": ["yard"],
+      "w": 1,
+      "h": 2,
+      "anchorY": 1
+    },
+    "bush": {
+      "file": "bush.png",
+      "layer": "props",
+      "solid": true,
+      "cameras": ["yard"],
+      "w": 1,
+      "h": 1
+    },
+    "fence": {
+      "file": "fence.png",
+      "layer": "props",
+      "solid": true,
+      "cameras": ["yard"],
+      "w": 1,
+      "h": 1
+    },
+    "house": {
+      "file": "house.png",
+      "layer": "shell",
+      "solid": true,
+      "cameras": ["yard"],
+      "w": 3,
+      "h": 3,
+      "anchorY": 2,
+      "hit": true
+    },
+    "bed": {
+      "file": "bed.png",
+      "layer": "furniture",
+      "solid": true,
+      "cameras": ["inside"],
+      "w": 2,
+      "h": 1
+    },
+    "table": {
+      "file": "table.png",
+      "layer": "furniture",
+      "solid": true,
+      "cameras": ["inside"],
+      "w": 1,
+      "h": 1
+    },
+    "chair": {
+      "file": "chair.png",
+      "layer": "furniture",
+      "solid": true,
+      "cameras": ["inside"],
+      "w": 1,
+      "h": 1
+    },
+    "plant": {
+      "file": "plant.png",
+      "layer": "furniture",
+      "solid": false,
+      "cameras": ["inside", "yard"],
+      "w": 1,
+      "h": 1
+    },
+    "bookshelf": {
+      "file": "bookshelf.png",
+      "layer": "furniture",
+      "solid": true,
+      "cameras": ["inside"],
+      "w": 1,
+      "h": 2,
+      "anchorY": 1
+    },
+    "agent": {
+      "file": "agent.png",
+      "layer": "agent",
+      "solid": false,
+      "cameras": ["inside", "yard"],
+      "w": 1,
+      "h": 1,
+      "sheet": { "frameW": 16, "frameH": 16, "frames": { "s": 0, "n": 1, "e": 2, "w": 3 } }
+    },
+    "select": {
+      "file": "select.png",
+      "layer": "overlay",
+      "solid": false,
+      "cameras": ["inside", "yard"],
+      "w": 1,
+      "h": 1
+    }
+  },
+  "palette": {
+    "placeable": ["bed", "table", "chair", "plant", "bookshelf", "tree", "bush", "fence"]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "alexokita.oh-machi",
+  "name": "Oh Machi",
+  "version": "0.1.0",
+  "author": "Alex Okita",
+  "license": "MIT",
+  "description": "A cozy local pixel house for Omarchy: ambient desktop lot plus a bar panel to walk, furnish, and hang out with Machi.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Oh Machi",
+    "description": "Open your pixel house. Ambient lot sits on the desktop; click the bar chip for the apartment.",
+    "category": "Fun",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "aliases": ["oh-machi", "machi", "town"]
+  }
+}

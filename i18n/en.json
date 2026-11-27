@@ -1,0 +1,10 @@
+{
+  "bar.loading": "Oh Machi loading…",
+  "bar.tooltip": "%1 is %2 — click to open the house",
+  "panel.title": "Oh Machi",
+  "panel.inside": "Inside",
+  "panel.yard": "Yard",
+  "panel.reset": "Reset lot",
+  "panel.place": "Place from starter pack",
+  "panel.help": "Left click: walk or place. Middle click: select. Right click: remove. I / Y: camera. Esc: clear tool."
+}
